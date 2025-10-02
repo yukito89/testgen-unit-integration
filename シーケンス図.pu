@@ -1,0 +1,63 @@
+@startuml シーケンス図
+!theme plain
+title アプリケーション詳細シーケンス図
+
+' 日本語フォント指定（環境に応じて変更可能）
+skinparam defaultFontName "Yu Gothic"
+
+actor ユーザー as User
+box "ローカル環境" #LightBlue
+    participant "ブラウザ (script.js)" as Browser
+end box
+box "クラウド環境 (Azure)" #LightGreen
+    participant "Functions (function_app.py)" as Functions
+    participant "Azure OpenAI Service" as OpenAI
+end box
+
+User -> Browser: 1. Excelファイルを選択し、\n「アップロードして生成」をクリック
+activate Browser
+
+Browser -> Functions: 2. HTTP POST /api/upload\n(FormDataにファイルを含める)
+deactivate Browser
+activate Functions
+
+Functions -> Functions: 3. リクエストからファイルを取得 (req.files)
+Functions -> Functions: 4. Excelをメモリにロード (pd.read_excel)
+
+loop 各Excelシート
+    alt シート名が「処理詳細」の場合
+        Functions -> Functions: 5a. シート内容をテキストに変換
+        Functions -> OpenAI: 6a. 構造化をリクエスト\n(call_openai_structuring)
+        activate OpenAI
+        OpenAI --> Functions: 7a. 構造化されたMarkdownを返す
+        deactivate OpenAI
+    else その他のシートの場合
+        Functions -> Functions: 5b. データクレンジング実行 (_clean_sheet)
+        Functions -> Functions: 6b. Markdownテーブルに変換 (to_markdown)
+    end
+end
+
+Functions -> Functions: 8. 全シートのMarkdownを結合し、\n単一の設計書Markdownを生成
+note right: この内容は first.md に保存される
+
+Functions -> OpenAI: 9. 設計書全体を渡し、\nテスト観点抽出をリクエスト\n(call_openai_extract_test_perspectives)
+activate OpenAI
+OpenAI --> Functions: 10. テスト観点が追記された\nMarkdownを返す
+deactivate OpenAI
+note right: この内容は second.md に保存される
+
+Functions -> OpenAI: 11. テスト観点を含むMarkdownを渡し、\nテスト仕様書生成をリクエスト\n(call_openai_create_test_spec)
+activate OpenAI
+OpenAI --> Functions: 12. Markdown形式の\nテスト仕様書(表)を返す
+deactivate OpenAI
+note right: この内容は third.md に保存される
+
+Functions -> Functions: 13. Markdownの表を\npandas DataFrameに変換
+Functions -> Functions: 14. DataFrameを\nExcel形式(バイナリ)に変換
+Functions --> Browser: 15. HTTP 200 OK\n(Content-Type: application/vnd.ms-excel)\n(Body: Excelファイルデータ)
+deactivate Functions
+activate Browser
+
+Browser -> User: 16. ダウンロード処理を実行し、\n「テスト仕様書.xlsx」を保存
+deactivate Browser
+@enduml
