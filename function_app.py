@@ -10,6 +10,9 @@ from urllib.parse import quote
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+import boto3
+from botocore.config import Config
+import json
 
 # .envファイルから環境変数を読み込む
 load_dotenv()
@@ -17,180 +20,214 @@ load_dotenv()
 # FunctionAppの初期化
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
-# --- Azure OpenAI Service 接続情報 ---
-# .envファイルまたは環境変数から設定を読み込む
-api_key = os.getenv("AZURE_OPENAI_API_KEY")
-endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-api_version = os.getenv("AZURE_OPENAI_API_VERSION")
-deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT")
+# --- LLM Service Configuration ---
+llm_service = os.getenv("LLM_SERVICE", "AZURE")
 
-# 必須の環境変数が設定されているか確認
-if not all([api_key, endpoint, api_version, deployment]):
-    missing_vars = [
-        var for var, value in {
-            "AZURE_OPENAI_API_KEY": api_key,
-            "AZURE_OPENAI_ENDPOINT": endpoint,
-            "AZURE_OPENAI_API_VERSION": api_version,
-            "AZURE_OPENAI_DEPLOYMENT": deployment
-        }.items() if not value
-    ]
-    raise ValueError(f"必須の環境変数が設定されていません: {', '.join(missing_vars)}")
+# --- Azure OpenAI Service Connection Information ---
+azure_api_key = os.getenv("AZURE_OPENAI_API_KEY")
+azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+azure_api_version = os.getenv("AZURE_OPENAI_API_VERSION")
+azure_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT")
 
-# AzureOpenAIクライアントの初期化
-client = AzureOpenAI(
-    api_version=api_version,
-    azure_endpoint=endpoint,
-    api_key=api_key,
-)
+# --- AWS Bedrock Connection Information ---
+aws_region = os.getenv("AWS_REGION")
+aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
+aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+aws_bedrock_model_id = os.getenv("AWS_BEDROCK_MODEL_ID")
 
-def call_openai_structuring(prompt: str) -> str:
-    try:
-        response = client.chat.completions.create(
-            messages = [
-                {
-                    "role": "system",
-                    "content": '''
-                        あなたは業務システムの設計書を解析し、処理Noごとに意味的に整理されたMarkdownテーブルを作成する構造化エンジニアです。
+# LLMクライアントの初期化用変数
+azure_client = None
+bedrock_client = None
 
-                        出力要件：
-                        - 処理Noごとにセクション分け（例：### 処理No.1）
-                        - 各処理に対し、以下の項目を表形式で抽出：
-                        - No（1〜999、処理Noとは連動不要）
-                        - タイトル
-                        - トリガ（画面操作・遷移条件）
-                        - 処理内容（要点を簡潔に）
-                        - 使用DB・テーブル
-                        - 画面遷移先（URLや備考）
+# 必須環境変数のチェック関数
+def validate_env():
+    if llm_service == "AZURE":
+        # Azure OpenAIに必要な環境変数がすべて設定されているか確認
+        required = [azure_api_key, azure_endpoint, azure_api_version, azure_deployment]
+        if not all(required):
+            raise ValueError("Azure OpenAI の必須環境変数が設定されていません。")
+    elif llm_service == "AWS":
+        # AWS Bedrockに必要な環境変数がすべて設定されているか確認
+        required = [aws_region, aws_access_key_id, aws_secret_access_key, aws_bedrock_model_id]
+        if not all(required):
+            raise ValueError("AWS Bedrock の必須環境変数が設定されていません。")
+    else:
+        # サポートされていないLLMサービスが指定された場合のエラー
+        raise ValueError(f"無効なLLMサービスが指定されました: {llm_service}")
 
-                        記述ルール：
-                        - 処理内に複数ステップがある場合は、No.を分割して1行ずつ記載
-                        - 同一処理内で区分・トリガ・処理内容が重複する場合は、該当欄を省略してもよい（視認性重視）
-                        - 処理内容の改行はMarkdownの箇条書き（-）で表現し、`<br>`タグは使用しない
-                        - 仕様ルールは注記として記載
-                        - 意味のない行・空欄は除外
-                        - 出力形式はMarkdown
-                    '''
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            max_completion_tokens=30000,
-            model=deployment
+# LLMクライアントの初期化関数
+def initialize_client():
+    global azure_client, bedrock_client
+    validate_env()  # 環境変数の妥当性をチェック
+
+    if llm_service == "AZURE":
+        # Azure OpenAIクライアントの初期化
+        azure_client = AzureOpenAI(
+            api_version=azure_api_version,
+            azure_endpoint=azure_endpoint,
+            api_key=azure_api_key,
         )
-        return response.choices[0].message.content
-    except Exception as e:
-        logging.error("構造化処理中にエラーが発生しました。詳細：" + str(e))
-        raise RuntimeError("AIによる構造化処理に失敗しました。ログを確認してください。")
+    elif llm_service == "AWS":
+        # AWS Bedrockクライアントの初期化（タイムアウト設定付き）
+        config = Config(read_timeout=600, connect_timeout=60)
+        bedrock_client = boto3.client(
+            "bedrock-runtime",
+            region_name=aws_region,
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+            config=config,
+        )
+
+# LLMサービスを呼び出す共通関数
+def call_llm(system_prompt: str, user_prompt: str) -> str:
+    """
+    指定されたLLMサービス（AzureまたはAWS）を使ってプロンプトを送信し、応答を取得する。
+    system_prompt: システムプロンプト（モデルの振る舞いを定義）
+    user_prompt: ユーザーからの入力
+    戻り値: モデルからの応答テキスト
+    """
+    global azure_client, bedrock_client
     
-def call_openai_extract_test_perspectives(prompt: str) -> str:
+    # クライアントが未初期化の場合は初期化する
+    if llm_service == "AZURE" and azure_client is None:
+        initialize_client()
+    elif llm_service == "AWS" and bedrock_client is None:
+        initialize_client()
+    
     try:
-        response = client.chat.completions.create(
-            messages = [
-                {
-                    "role": "system",
-                    "content": '''
-                        あなたは業務システムの設計書を解析し、以下の情報を統合してテスト観点抽出を行う構造化エンジニアです。
+        if llm_service == "AZURE":
+            # Azure OpenAIにチャット形式でリクエストを送信
+            response = azure_client.chat.completions.create(
+                model=azure_deployment,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                max_tokens=16384,
+            )
+            return response.choices[0].message.content
 
-                        対象情報（すべて構造化済み）：
-                        - 画面項目定義（No／項目名／種別／I/O／桁数／必須／初期値／備考）
-                        - 処理詳細（処理Noごとの画面遷移・DBアクセス・処理内容）
-                        - 画面処理概要（処理Noと画面の関係、使用オブジェクト）
-                        - 入力チェック説明（項目ごとのチェック区分・条件・エラーコード）
-                        
-                        出力形式：
-                        - 各シートごとに `##` セクションで分けてください
-                        - 各シート内は項目または処理単位で `###` セクションに分けてください
-                        - 各項目・処理に対して、以下の3つに分けて構造化（処理No./処理名を明記）
-                        - 表示仕様：画面上の表示や初期値、取得元、遷移条件など
-                        - 業務ルール：業務上の制約、依存関係、モード別の分岐、DB条件など
-                        - テスト観点：入力チェック、表示確認、処理分岐、エラー制御、境界値、異常系など
-                        
-                        記述ルール：
-                        - モード（登録／更新／削除）による分岐は明示
-                        - 複数シートにまたがる情報は統合して構造化
-                        - テスト観点は網羅的かつ粒度を揃えて抽出
-                        - 出力形式はMarkdown
-                    '''
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            max_completion_tokens=30000,
-            model=deployment
-        )
-        return response.choices[0].message.content
+        elif llm_service == "AWS":
+            # AWS BedrockにConverse APIでリクエストを送信
+            response = bedrock_client.converse(
+                modelId=aws_bedrock_model_id,
+                messages=[{"role": "user", "content": [{"text": user_prompt}]}],
+                system=[{"text": system_prompt}],
+                inferenceConfig={"maxTokens": 16384},
+            )
+            # レスポンスの構造を確認してから取得
+            if 'output' in response and 'message' in response['output']:
+                return response['output']['message']['content'][0]['text']
+            else:
+                logging.error(f"予期しないレスポンス構造: {json.dumps(response, ensure_ascii=False)}")
+                raise RuntimeError("AWS Bedrockからの応答形式が不正です。")
+
     except Exception as e:
-        logging.error("テスト観点抽出中にエラーが発生しました。詳細：" + str(e))
-        raise RuntimeError("AIによるテスト観点抽出に失敗しました。ログを確認してください。")
+        logging.error(f"{llm_service} API呼び出し中にエラーが発生しました: {str(e)}")
+        raise RuntimeError(f"{llm_service} API呼び出しに失敗しました: {str(e)}")
 
-def call_openai_create_test_spec(prompt: str) -> str:
-    try:
-        response = client.chat.completions.create(
-            messages = [
-                {
-                    "role": "system",
-                    "content": '''
-                        あなたはソフトウェア品質保証の専門家です。
-                        ユーザーが提示する業務アプリケーションの仕様情報をもとに、Excel形式で管理しやすいテスト仕様書を作成してください。
 
-                        出力要件：
-                        - 出力形式は以下の4列構成の表形式（Markdown）で統一すること：
-                            - No（テストケースごとの連番）
-                            - 区分（画面状態や操作単位）
-                            - テストケース（操作観点を簡潔に記述）
-                            - 期待結果（画面表示 / DB更新 / エラー等）
+def structuring(prompt: str) -> str:
+    system_prompt = '''
+        あなたは業務システムの設計書を解析し、構造化されたMarkdownドキュメントを作成する専門家です。
 
-                        記述ルール：
-                        - テスト観点は正常系・異常系・境界値・業務ルール適用などを網羅すること
-                        - 区分は「初期表示」「確認ボタン押下」「絞り込み入力時」など、画面状態や操作単位で分類すること
-                        - 期待結果が複数ある場合は、Noを分割して1行ずつ記載すること（1期待結果＝1行）
-                        - 同じ区分やテストケースが連続する場合は、区分やテストケース欄を省略してもよい（Excelでの視認性を考慮）
-                        - 期待結果は、画面表示内容・DB更新内容・エラーメッセージなどを具体的かつ簡潔に記述すること
-                        - 業務ルールや仕様注記も反映すること
-                        - 出力はMarkdown表形式とし、Excel変換可能な構造で記述すること
-                    '''
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            max_completion_tokens=30000,
-            model=deployment
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        logging.error("テスト仕様書生成中にエラーが発生しました。詳細：" + str(e))
-        raise RuntimeError("AIによるテスト仕様書生成に失敗しました。ログを確認してください。")
+        タスク：
+        提供されたテキストから処理フローや機能仕様を抽出し、読みやすく整理してください。
+
+        出力要件：
+        - 処理や機能ごとにセクション分け（### 見出し）
+        - 各処理・機能について以下を抽出（存在する場合）：
+          - 処理ID/番号
+          - 処理名/機能名
+          - トリガー/実行条件
+          - 処理内容/動作
+          - 使用するデータ/テーブル/API
+          - 遷移先/出力
+        - 表形式で記述可能な場合は表形式を使用
+
+        記述ルール：
+        - 複数ステップがある場合は分割して記載
+        - 箇条書きは `-` を使用（`<br>`タグは使用しない）
+        - 重複情報は省略可
+        - 意味のない行・空欄は除外
+        - 出力形式はMarkdown
+    '''
+    return call_llm(system_prompt, prompt)
+
+def extract_test_perspectives(prompt: str) -> str:
+    system_prompt = '''
+        あなたはソフトウェアテストの専門家です。提供された設計書からテスト観点を抽出してください。
+
+        タスク：
+        設計書の内容を分析し、機能・処理単位でテスト観点を整理してください。
+
+        出力形式：
+        - 機能・処理単位で `##` セクションに分けてください
+        - 各機能・処理について以下を記述：
+          - **仕様概要**：機能の目的、入出力、制約条件
+          - **業務ルール**：業務上の制約、分岐条件、依存関係
+          - **テスト観点**：確認すべきポイント（正常系、異常系、境界値、エラー処理）
+        
+        記述ルール：
+        - 個別の画面項目ごとではなく、機能・処理単位でまとめて記述
+        - 入力チェックや制約条件は要約して記載
+        - モードや状態による分岐は明示
+        - 簡潔かつ網羅的に記述
+        - 出力形式はMarkdown
+    '''
+    return call_llm(system_prompt, prompt)
+
+def create_test_spec(prompt: str) -> str:
+    system_prompt = '''
+        あなたはソフトウェア品質保証の専門家です。
+        提供された仕様情報をもとに、実務レベルのテスト仕様書を作成してください。
+
+        出力要件：
+        - 以下の4列構成の表形式（Markdown）で出力：
+            - No（連番）
+            - 区分（機能・処理単位）
+            - テストケース（テスト内容）
+            - 期待結果（確認事項）
+
+        記述ルール：
+        - 正常系・異常系・境界値・エラー処理を網羅
+        - 区分は機能・処理単位で分類（例：「初期表示」「登録処理」「入力チェック」）
+        - 期待結果が複数ある場合は行を分割（1期待結果＝1行）
+        - 同じ区分・テストケースが連続する場合は該当欄を省略可
+        - 期待結果は具体的かつ簡潔に記述
+        - 重複するテストケースは統合
+        - セクション区切りは行わない（表のみ出力）
+        
+        出力例：
+        | No | 区分 | テストケース | 期待結果 |
+        |---|---|---|---|
+        | 1 | 初期表示 | 画面を開く | 入力欄が空白で表示されること |
+        | 2 |  |  | 一覧が全件表示されること |
+        | 3 | 入力チェック | 必須項目を未入力で登録 | エラーメッセージが表示されること |
+    '''
+    return call_llm(system_prompt, prompt)
 
 def _clean_sheet(df: pd.DataFrame) -> pd.DataFrame:
     original_df = df.copy()
     try:
         # 1. 基本的なクレンジング
-        df.dropna(how='all', axis=1, inplace=True) # 全部NaNの列を削除
-        df.dropna(how='all', axis=0, inplace=True) # 全部NaNの行を削除
-        df.reset_index(drop=True, inplace=True)    # 行番号を振りなおす
+        df.dropna(how='all', axis=1, inplace=True)
+        df.dropna(how='all', axis=0, inplace=True)
+        df.reset_index(drop=True, inplace=True)
         
         rows_before_header_change = len(df)
 
         # 2. ヘッダー特定と設定
-        if not df.empty and len(df) > 1:
-            # 上から5行を候補にして「最も空欄が少ない行」をヘッダー列名の行）として採用
-            header_candidates = df.head(5)
-            best_header_row_index = header_candidates.notna().sum(axis=1).idxmax()
-            
-            new_header = df.iloc[best_header_row_index] # ヘッダーにする行
-            df = df[best_header_row_index + 1:]         # その下からデータ
-            df.columns = new_header                     # ヘッダーに設定
+        fixed_header_row_index = 0  # 1行目ヘッダーとして固定
+        if len(df) > fixed_header_row_index:
+            new_header = df.iloc[fixed_header_row_index].values  # 明示的に配列化
+            df = df.iloc[fixed_header_row_index + 1:].copy()     # 2行目以降をデータとして残す
+            df.columns = new_header                              # ヘッダーを設定
         
         # 3. ヘッダー後のクレンジング
         if not df.empty:
-            df = df.loc[:, pd.notna(df.columns)] # ヘッダー名がNaNの列を削除
-            df.dropna(how='all', inplace=True)   # 空行を削除
+            df = df.loc[:, pd.notna(df.columns)]
+            df.dropna(how='all', inplace=True)
 
         # 4. 【保険】行数が激減していたら、ヘッダー変更を破棄
         if df.empty or (rows_before_header_change > 5 and len(df) < rows_before_header_change * 0.2):
@@ -205,16 +242,23 @@ def _clean_sheet(df: pd.DataFrame) -> pd.DataFrame:
         df.dropna(how='all', axis=0, inplace=True)
 
     # 5. 最終的な仕上げ
-    df.fillna('', inplace=True)       # NaNを空文字に
-    df = df.infer_objects(copy=False) # 型を推測（数字は数値型に）
+    df.fillna('', inplace=True)
+    df = df.infer_objects(copy=False)
     return df
 
 @app.route(route="upload", methods=["POST"])
 def upload(req: func.HttpRequest) -> func.HttpResponse:
     try:
         file = req.files.get("documentFile")
+        if not file:
+            return func.HttpResponse("ファイルがアップロードされていません", status_code=400)
+        
         file_bytes = file.read()
         filename = file.filename
+        
+        if not filename.endswith('.xlsx'):
+            return func.HttpResponse("Excelファイル(.xlsx)のみ対応しています", status_code=400)
+            
     except Exception as e:
         logging.error(f"ファイル取得エラー: {e}")
         return func.HttpResponse("ファイルの取得に失敗しました", status_code=400)
@@ -224,7 +268,8 @@ def upload(req: func.HttpRequest) -> func.HttpResponse:
     try:
         # アップロードされたExcelファイル（バイナリ）をメモリ上で読み込み、全シートを辞書形式で取得
         # すべてのシートが {シート名: DataFrame} の形式で格納される
-        excel_data = pd.read_excel(io.BytesIO(file_bytes), sheet_name=None)
+        # header=Noneで全行をデータとして読み込み、_clean_sheet()でヘッダーを設定
+        excel_data = pd.read_excel(io.BytesIO(file_bytes), sheet_name=None, header=None)
 
         # Markdown構造化のためのリスト初期化
         toc_list = [] # 目次(Table of Contents)用のリスト
@@ -238,15 +283,15 @@ def upload(req: func.HttpRequest) -> func.HttpResponse:
             
             sheet_content = f"## {sheet_name}\n\n"
 
-            # 「処理詳細」シートはAIで、それ以外はPythonで処理を分岐
-            if sheet_name == '処理詳細':
+            # AI処理が必要なシート名をリストで指定（完全一致）
+            ai_processing_sheets = ['処理詳細仕様(初期処理)', '処理詳細仕様(当月仕掛発生PJ出力)']
+            
+            if sheet_name in ai_processing_sheets:
                 # --- AIによる構造化 ---
                 logging.info(f"「{sheet_name}」シートをAIで構造化します。")
                 try:
-                    # DataFrameをAIが解釈しやすい単純なテキストに変換
                     raw_text = '\n'.join(df.apply(lambda row: ' '.join(row.astype(str).fillna('')), axis=1))
                     
-                    # AI呼び出し (1回目)
                     structuring_prompt = f'''
                         以下の非構造化テキストを解析し、指定の形式で整理してください。
 
@@ -254,7 +299,7 @@ def upload(req: func.HttpRequest) -> func.HttpResponse:
                         {raw_text}
                         --- テキスト終了 ---
                         '''
-                    structured_table = call_openai_structuring(structuring_prompt)
+                    structured_table = structuring(structuring_prompt)
                     sheet_content += structured_table
                     
                 except Exception as e:
@@ -289,20 +334,26 @@ def upload(req: func.HttpRequest) -> func.HttpResponse:
             {md_output_first}
             --- テキスト終了 ---
         '''
-        md_output_second = call_openai_extract_test_perspectives(extract_test_perspectives_prompt)
+        md_output_second = extract_test_perspectives(extract_test_perspectives_prompt)
         logging.info("テスト観点抽出が完了し、メモリ上に保持しました。")
 
         # --- 3. AIによるテスト仕様書生成 ---
         logging.info("設計書全体をAIに渡し、テスト仕様書を生成します。")
         test_gen_prompt = f'''
-            以下は対象システムの基準仕様書です。  
-            この仕様に基づいて、実務レベルのテスト仕様書を作成してください。  
-
-            --- 対象仕様書開始 ---
+            以下は対象システムの設計書とテスト観点です。
+            この情報に基づいて、実務レベルのテスト仕様書を作成してください。
+            
+            重要：設計書の詳細情報を参照しつつ、テスト観点で抽出された重要ポイントを中心にテストケースを作成してください。
+            
+            --- 抽出されたテスト観点（優先参照） ---
             {md_output_second}
-            --- 対象仕様書終了 ---
+            
+            --- 元の設計書（詳細情報参照用） ---
+            {md_output_first}
+            --- 終了 ---
         '''
-        md_output_third = call_openai_create_test_spec(test_gen_prompt)
+
+        md_output_third = create_test_spec(test_gen_prompt)
         logging.info("テスト仕様書の生成が完了し、メモリ上に保持しました。")
 
         # --- 4. テスト仕様書(Markdown)をExcelに変換 ---
@@ -310,11 +361,23 @@ def upload(req: func.HttpRequest) -> func.HttpResponse:
         
         # Markdownから表部分だけを抽出
         md_lines = [line.strip() for line in md_output_third.splitlines() if line.strip().startswith("|")]
+        
+        if not md_lines:
+            logging.error("テスト仕様書にMarkdown表が見つかりませんでした")
+            return func.HttpResponse("テスト仕様書の生成に失敗しました（表形式が見つかりません）", status_code=500)
+        
         tsv_text = "\n".join([line.strip("|").replace("|", "\t") for line in md_lines])
 
         # DataFrame化
         df = pd.read_csv(io.StringIO(tsv_text), sep="\t")
         df.columns = [col.strip() for col in df.columns]
+        
+        # 必須列の存在確認
+        required_columns = ["No", "区分", "テストケース", "期待結果"]
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            logging.error(f"必須列が不足しています: {missing_columns}")
+            return func.HttpResponse(f"テスト仕様書の形式が不正です（不足列: {', '.join(missing_columns)}）", status_code=500)
         
         # 既存テンプレートを読み込み
         template_path = "単体テスト仕様書.xlsx"
@@ -356,7 +419,7 @@ def upload(req: func.HttpRequest) -> func.HttpResponse:
         zip_buffer.seek(0)
         zip_bytes = zip_buffer.read()
         logging.info("ZIPファイルの作成が完了しました。")
-
+        
         # --- 6. ユーザーへの返却（ZIPファイル） ---
         output_filename = f"テスト仕様書_{Path(filename).stem}.zip"
         encoded_filename = quote(output_filename)

@@ -8,3 +8,4 @@ openpyxl
 tabulate
 openai
 python-dotenv
+boto3

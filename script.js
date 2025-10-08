@@ -18,6 +18,7 @@ uploadBtn.addEventListener("click", async () => {
 
     // ===== ローカル開発用 =====
     const endpoint = "http://localhost:7071/api/upload";
+    // const endpoint = "http://localhost:3000/bedrock";
 
     try {
         const res = await fetch(endpoint, {
