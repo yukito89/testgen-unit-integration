@@ -5,7 +5,6 @@
 azure-functions
 pandas
 openpyxl
-tabulate
 openai
 python-dotenv
 boto3

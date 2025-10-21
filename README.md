@@ -13,12 +13,6 @@
 - 生成されたMarkdownを`単体テスト仕様書.xlsx`テンプレートに書き込みます。
 - 最終的な成果物（構造化設計書.md, テスト観点.md, テスト仕様書.md, テスト仕様書.xlsx）をZIPファイルにまとめて返却します。
 
-## 処理フロー
-
-アプリケーション全体の処理フローは以下のシーケンス図を参照してください：
-
-![out/シーケンス図/シーケンス図.png](out/シーケンス図.png)
-
 ---
 
 ## 目次
@@ -31,6 +25,7 @@
   - [AWS Bedrockの設定](#aws-bedrockの設定)
   - [Azure OpenAIの設定](#azure-openaiの設定)
 - [ローカルでの実行](#ローカルでの実行)
+- [Azureへのデプロイ](#azureへのデプロイ)
 - [主要ファイル構成](#主要ファイル構成)
 - [使用技術一覧](#使用技術一覧)
 
@@ -219,14 +214,59 @@ AZURE_OPENAI_DEPLOYMENT=...
 
 2.  起動後、`http://localhost:7071/api/upload` というエンドポイントが利用可能になります。
 
-3.  `curl`やPostmanなどのツールを使って、ExcelファイルをPOSTします。（動作検証例）
+3.  フロントエンドからの動作確認
+    - VS Codeで「Live Server」拡張機能をインストール
+    - `index.html`を右クリック→「Open with Live Server」で起動
+    - ブラウザでExcelファイルをアップロードして動作確認
 
-    **curlの例:**
-    ```bash
-    curl -X POST -F "documentFile=@/path/to/your/設計書.xlsx" http://localhost:7071/api/upload -o output.zip
+---
+
+## Azureへのデプロイ
+
+### バックエンド（Azure Functions）のデプロイ
+
+1.  **Azure Tools拡張機能のインストール**
+    VS Codeの拡張機能から「Azure Tools」をインストールします。
+
+2.  **Azureにサインイン**
+    VS Codeのサイドバーから「Azure」アイコンをクリックし、「Sign in to Azure」でサインインします。
+
+3.  **Function Appの作成とデプロイ**
+    - サイドバーの「Azure」→「Functions」を右クリック
+    - 「Create Function App in Azure...」を選択
+    - アプリ名、Pythonバージョン（3.9以降）、リージョンを指定
+    - 作成完了後、プロジェクトフォルダを右クリック→「Deploy to Function App...」を選択
+
+4.  **環境変数の設定**
+    - Azureポータルで作成したFunction Appを開く
+    - 「設定」→「環境変数」→「アプリケーション設定」
+    - `.env`ファイルの内容を1つずつ追加（`LLM_SERVICE`, `AWS_ACCESS_KEY_ID`など）
+
+### フロントエンド（静的Webアプリ）のデプロイ
+
+1.  **script.jsのAPIエンドポイント変更**
+    ```javascript
+    const url = 'https://<your-function-app>.azurewebsites.net/api/upload';
     ```
-    - `@`の後にテストしたいExcelファイルの絶対パスまたは相対パスを指定します。
-    - `-o output.zip`で、返却されたZIPファイルを保存します。
+
+2.  **Azure Static Web Appsの作成**
+    - Azureポータルで「静的Webアプリ」を検索
+    - 「作成」をクリック
+    - リソースグループ、名前、リージョンを指定
+    - デプロイソースは「その他」を選択
+
+3.  **ファイルのアップロード**
+    - 作成した静的Webアプリを開く
+    - 左メニューの「環境」→「既定」を選択
+    - 「ファイルの管理」から`index.html`, `script.js`, `style.css`をアップロード
+
+4.  **CORS設定（Function App側）**
+    - Function Appの「API」→「CORS」
+    - 静的WebアプリのURL（`https://<your-static-app>.azurestaticapps.net`）を追加
+
+5.  **動作確認**
+    - 静的WebアプリのURLにアクセス
+    - Excelファイルをアップロードして動作確認
 
 ---
 
@@ -252,7 +292,8 @@ AZURE_OPENAI_DEPLOYMENT=...
 -   `boto3`: AWS SDK for Python。AWS Bedrockなど、AWSサービスを呼び出すためのクライアントライブラリ。
 -   `openai`: Azure OpenAI ServiceおよびOpenAI APIを呼び出すためのクライアントライブラリ。
 -   `python-dotenv`: `.env`ファイルから環境変数を読み込むために使用。ローカル開発で接続情報を管理します。
--   `pandas`, `openpyxl`, `tabulate`: 主にExcelファイルの読み書きやデータ整形のために使用されるライブラリ群。
+-   `pandas`: データ操作とExcelファイルの読み込みに使用。
+-   `openpyxl`: Excelファイルの書き込みと操作に使用。
 
 ### 2. 開発・デプロイツール
 
@@ -262,11 +303,15 @@ AZURE_OPENAI_DEPLOYMENT=...
 -   **Visual Studio Code 拡張機能**:
     -   **Azure Tools**: Azure Functions, App Service, Storageなど、AzureリソースをVS CodeのGUI上から直接操作・管理・デプロイできる統合拡張機能パック。
     -   **Python**: VS CodeでPythonのコード補完、デバッグ、IntelliSenseなどを有効にするための必須拡張機能。
+    -   **Live Server**: ローカル開発時にHTMLファイルを簡易Webサーバーで起動するための拡張機能。
 
 ### 3. 利用しているクラウドサービス
 
 -   **Azure Functions**:
     サーバーレスでコードを実行するためのコンピューティングサービス。本プロジェクトのバックエンド処理はこの上で動作します。
+
+-   **Azure Static Web Apps**:
+    静的コンテンツ（HTML、CSS、JavaScript）をホスティングするためのサービス。本プロジェクトのフロントエンドをデプロイします。
 
 -   **AWS Bedrock**:
     Amazon Web Services上で提供される、Claude Sonnetなどの大規模言語モデルを利用するためのマネージドサービス。
