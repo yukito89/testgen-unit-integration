@@ -21,16 +21,16 @@ load_dotenv()
 # FunctionAppの初期化
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
-# --- LLM Service Configuration ---
-llm_service = os.getenv("LLM_SERVICE", "AZURE")
+# --- LLMサービス設定 ---
+llm_service = os.getenv("LLM_SERVICE", "AWS")
 
-# --- Azure OpenAI Service Connection Information ---
+# --- Azure OpenAI Service 接続情報 ---
 azure_api_key = os.getenv("AZURE_OPENAI_API_KEY")
 azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
 azure_api_version = os.getenv("AZURE_OPENAI_API_VERSION")
 azure_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT")
 
-# --- AWS Bedrock Connection Information ---
+# --- AWS Bedrock 接続情報 ---
 aws_region = os.getenv("AWS_REGION")
 aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
 aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
