@@ -1,24 +1,55 @@
-const fileInput = document.querySelector("#fileInput");
 const status = document.querySelector("#status");
 const uploadBtn = document.querySelector("#uploadBtn");
+const testTypeRadios = document.querySelectorAll('input[name="testType"]');
+const unitTestInputs = document.querySelector("#unitTestInputs");
+const integrationTestInputs = document.querySelector("#integrationTestInputs");
+
+// ラジオボタンの切り替え処理
+testTypeRadios.forEach(radio => {
+    radio.addEventListener('change', (e) => {
+        if (e.target.value === 'unit') {
+            unitTestInputs.style.display = 'block';
+            integrationTestInputs.style.display = 'none';
+        } else {
+            unitTestInputs.style.display = 'none';
+            integrationTestInputs.style.display = 'block';
+        }
+    });
+});
 
 uploadBtn.addEventListener("click", async () => {
-    const file = fileInput.files[0];
+    const testType = document.querySelector('input[name="testType"]:checked').value;
+    const formData = new FormData();
+    formData.append("testType", testType);
 
-    if (!file) {
-        status.textContent = "ファイルを選択してください";
-        return;
+    if (testType === 'unit') {
+        const file = document.querySelector("#unitFileInput").files[0];
+        if (!file) {
+            status.textContent = "詳細設計書を選択してください";
+            return;
+        }
+        formData.append("documentFile", file);
+    } else {
+        const screenList = document.querySelector("#screenListInput").files[0];
+        const transition = document.querySelector("#transitionInput").files[0];
+        const detailDocs = document.querySelector("#detailDocsInput").files;
+
+        if (!screenList || !transition || detailDocs.length === 0) {
+            status.textContent = "必須ファイルをすべて選択してください";
+            return;
+        }
+
+        formData.append("screenListFile", screenList);
+        formData.append("transitionFile", transition);
+        for (let i = 0; i < detailDocs.length; i++) {
+            formData.append("detailDocs", detailDocs[i]);
+        }
     }
 
     uploadBtn.disabled = true;
     status.textContent = "生成中...";
 
-    const formData = new FormData();
-    formData.append("documentFile", file);
-
-    // ===== ローカル開発用 =====
     const endpoint = "http://localhost:7071/api/upload";
-    // const endpoint = "http://localhost:3000/bedrock";
 
     try {
         const res = await fetch(endpoint, {

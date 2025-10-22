@@ -116,7 +116,7 @@ def call_llm(system_prompt: str, user_prompt: str, max_retries: int = 5) -> str:
                     modelId=aws_bedrock_model_id,
                     messages=[{"role": "user", "content": [{"text": user_prompt}]}],
                     system=[{"text": system_prompt}],
-                    inferenceConfig={"maxTokens": 32768},
+                    inferenceConfig={"maxTokens": 64000},
                 )
                 # レスポンスの構造を確認してから取得
                 if 'output' in response and 'message' in response['output']:
@@ -247,8 +247,123 @@ def create_test_spec(prompt: str) -> str:
     '''
     return call_llm(system_prompt, prompt)
 
+def structuring_screen_list(prompt: str) -> str:
+    system_prompt = '''
+        あなたは業務システムの画面一覧を解析し、構造化されたMarkdownドキュメントを作成する専門家です。
+
+        【タスク】
+        提供されたExcelシートから画面一覧情報を抽出し、読みやすく整理してください。
+
+        【出力要件】
+        - 画面ID、画面名、画面種別、URL、概要などを抽出
+        - Markdown表形式で出力
+        - 画面IDは必ず保持（後続処理で画面遷移定義とマッチングに使用）
+        - 画面の分類・グループがあれば見出しで整理
+
+        【記述ルール】
+        - 意味のない行・空欄は除外
+        - ヘッダー行を適切に認識
+        - 出力形式はMarkdown
+    '''
+    return call_llm(system_prompt, prompt)
+
+def structuring_transition(prompt: str) -> str:
+    system_prompt = '''
+        あなたは業務システムの画面遷移定義を解析し、構造化されたMarkdownドキュメントを作成する専門家です。
+
+        【タスク】
+        提供されたExcelシートから画面遷移情報を抽出し、読みやすく整理してください。
+
+        【出力要件】
+        - 遷移元画面ID/名、遷移先画面ID/名、遷移条件、トリガー（ボタン名など）を抽出
+        - Markdown表形式で出力
+        - 画面IDは必ず保持（画面一覧とのマッチングに使用）
+        - 業務フローごとに見出しで整理
+
+        【記述ルール】
+        - 意味のない行・空欄は除外
+        - ヘッダー行を適切に認識
+        - 出力形式はMarkdown
+    '''
+    return call_llm(system_prompt, prompt)
+
+def extract_integration_scenarios(prompt: str) -> str:
+    system_prompt = '''
+        あなたは結合テストの専門家です。画面一覧、画面遷移定義、詳細設計書から業務シナリオを抽出してください。
+
+        【タスク】
+        提供された情報から、エンドツーエンドの業務シナリオを抽出し、Markdown表形式で出力してください。
+
+        【出力形式】
+        以下の10列構成のMarkdown表で出力：
+        - テストNo: シナリオID（A-01, B-01など）
+        - 画面1: 開始画面名
+        - 機能/操作/状況1: 画面1での操作内容
+        - 画面2: 遷移先画面名（なければ空欄）
+        - 機能/操作/状況2: 画面2での操作内容（なければ空欄）
+        - 画面3: 遷移先画面名（なければ空欄）
+        - 機能/操作/状況3: 画面3での操作内容（なければ空欄）
+        - 画面4: 遷移先画面名（なければ空欄）
+        - 機能/操作/状況4: 画面4での操作内容（なければ空欄）
+        - 確認内容: シナリオ全体で確認すべき内容
+
+        【記述ルール】
+        - 業務フロー単位でシナリオをグループ化（A群、B群など）
+        - 各シナリオは主要な業務パスを表現
+        - 正常系、異常系、代替パスを含める
+        - 画面遷移は最大4画面まで（それ以上は別シナリオに分割）
+        - 確認内容は「～であること」「～されること」で統一
+        - 表形式のみ出力（説明文は不要）
+    '''
+    return call_llm(system_prompt, prompt)
+
+def create_integration_test_spec(prompt: str) -> str:
+    system_prompt = '''
+        あなたは結合テストの専門家です。抽出されたシナリオを詳細なテストケースに展開してください。
+
+        【タスク】
+        各シナリオを細かいテストケースに分解し、実行可能なレベルまで詳細化してください。
+
+        【出力形式】
+        以下の10列構成のMarkdown表で出力：
+        - テストNo: テストケースID（A-01-1, A-01-2など、シナリオIDに枝番を付与）
+        - 画面1: 開始画面名
+        - 機能/操作/状況1: 画面1での具体的操作
+        - 画面2: 遷移先画面名
+        - 機能/操作/状況2: 画面2での具体的操作
+        - 画面3: 遷移先画面名
+        - 機能/操作/状況3: 画面3での具体的操作
+        - 画面4: 遷移先画面名
+        - 機能/操作/状況4: 画面4での具体的操作
+        - 確認内容: 具体的な確認事項
+
+        【詳細化の観点】
+        - 入力値のバリエーション（正常値、境界値、異常値）
+        - 権限による動作の違い
+        - データ状態による分岐
+        - エラーハンドリング
+        - 画面項目の初期値、表示制御
+
+        【記述ルール】
+        - 1シナリオから複数のテストケースを生成
+        - 操作内容は具体的に記述（ボタン名、入力値など）
+        - 確認内容は「～であること」「～されること」で統一
+        - 表形式のみ出力（説明文は不要）
+    '''
+    return call_llm(system_prompt, prompt)
+
 @app.route(route="upload", methods=["POST"])
 def upload(req: func.HttpRequest) -> func.HttpResponse:
+    test_type = req.form.get("testType", "unit")
+    
+    if test_type == "unit":
+        return generate_unit_test(req)
+    elif test_type == "integration":
+        return generate_integration_test(req)
+    else:
+        return func.HttpResponse("無効なテストタイプです", status_code=400)
+
+def generate_unit_test(req: func.HttpRequest) -> func.HttpResponse:
     try:
         file = req.files.get("documentFile")
         if not file:
@@ -264,7 +379,7 @@ def upload(req: func.HttpRequest) -> func.HttpResponse:
         logging.error(f"ファイル取得エラー: {e}")
         return func.HttpResponse("ファイルの取得に失敗しました", status_code=400)
 
-    logging.info(f"{filename} を受信しました。処理を開始します。")
+    logging.info(f"{filename} を受信しました。単体テスト生成を開始します。")
 
     try:
         # アップロードされたExcelファイル（バイナリ）をメモリ上で読み込み、全シートを辞書形式で取得
@@ -360,7 +475,7 @@ def upload(req: func.HttpRequest) -> func.HttpResponse:
         # 既存テンプレートを読み込み
         template_path = "単体テスト仕様書.xlsx"
         wb = load_workbook(template_path)
-        ws = wb.active   # もしくはシート名指定 → wb["Sheet1"]
+        ws = wb.active
 
         # マッピング定義（DataFrame列名 → Excel列番号）
         column_map = {
@@ -372,8 +487,8 @@ def upload(req: func.HttpRequest) -> func.HttpResponse:
             "トレース元": 42    # AP列
         }
 
-        # DataFrameをA11,B11,F11,S11に書き込み
-        start_row = 2
+        # DataFrameをA11,B11,F11,J11,W11,AP11に書き込み
+        start_row = 11
         for i, row in enumerate(df.itertuples(index=False), start=start_row):
             for col_name, excel_col in column_map.items():
                 if col_name in df.columns:
@@ -389,12 +504,13 @@ def upload(req: func.HttpRequest) -> func.HttpResponse:
 
         # --- 5. 全成果物をZIPファイルにまとめる ---
         logging.info("全成果物をZIPファイルにまとめています。")
+        base_name = Path(filename).stem
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            zip_file.writestr("1_構造化設計書.md", md_output_first.encode('utf-8'))
-            zip_file.writestr("2_テスト観点.md", md_output_second.encode('utf-8'))
-            zip_file.writestr("3_テスト仕様書.md", md_output_third.encode('utf-8'))
-            zip_file.writestr("テスト仕様書.xlsx", excel_bytes)
+            zip_file.writestr(f"{base_name}_構造化設計書.md", md_output_first.encode('utf-8'))
+            zip_file.writestr(f"{base_name}_テスト観点.md", md_output_second.encode('utf-8'))
+            zip_file.writestr(f"{base_name}_テスト仕様書.md", md_output_third.encode('utf-8'))
+            zip_file.writestr(f"{base_name}_テスト仕様書.xlsx", excel_bytes)
         
         zip_buffer.seek(0)
         zip_bytes = zip_buffer.read()
@@ -411,7 +527,110 @@ def upload(req: func.HttpRequest) -> func.HttpResponse:
         return func.HttpResponse(zip_bytes, status_code=200, headers=headers)
 
     except ValueError as ve:
-        # ハンドル済みのエラー（AI接続情報未設定など）
+        logging.error(f"設定エラー: {ve}")
+        return func.HttpResponse(str(ve), status_code=500)
+    except Exception as e:
+        logging.error(f"処理全体で予期せぬエラーが発生: {e}")
+        return func.HttpResponse("処理中にサーバーエラーが発生しました", status_code=500)
+
+def generate_integration_test(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        screen_list_file = req.files.get("screenListFile")
+        transition_file = req.files.get("transitionFile")
+        detail_docs = req.files.getlist("detailDocs")
+        
+        if not screen_list_file or not transition_file or not detail_docs:
+            return func.HttpResponse("必須ファイルが不足しています", status_code=400)
+            
+    except Exception as e:
+        logging.error(f"ファイル取得エラー: {e}")
+        return func.HttpResponse("ファイルの取得に失敗しました", status_code=400)
+
+    logging.info("結合テスト生成を開始します。")
+
+    try:
+        # 画面一覧を読み込み、AIで構造化
+        logging.info("画面一覧をAIで構造化します。")
+        screen_list_data = pd.read_excel(io.BytesIO(screen_list_file.read()), sheet_name=None, header=None)
+        screen_list_md = ""
+        for sheet_name, df in screen_list_data.items():
+            raw_text = '\n'.join(df.apply(lambda row: ' | '.join(row.astype(str).fillna('')), axis=1))
+            prompt = f'--- 画面一覧「{sheet_name}」 ---\n{raw_text}'
+            screen_list_md += f"## {sheet_name}\n\n{structuring_screen_list(prompt)}\n\n"
+        logging.info("画面一覧の構造化が完了しました。")
+        
+        # 画面遷移定義を読み込み、AIで構造化
+        logging.info("画面遷移定義をAIで構造化します。")
+        transition_data = pd.read_excel(io.BytesIO(transition_file.read()), sheet_name=None, header=None)
+        transition_md = ""
+        for sheet_name, df in transition_data.items():
+            raw_text = '\n'.join(df.apply(lambda row: ' | '.join(row.astype(str).fillna('')), axis=1))
+            prompt = f'--- 画面遷移定義「{sheet_name}」 ---\n{raw_text}'
+            transition_md += f"## {sheet_name}\n\n{structuring_transition(prompt)}\n\n"
+        logging.info("画面遷移定義の構造化が完了しました。")
+        
+        # 詳細設計書.mdを読み込み
+        detail_docs_md = ""
+        for doc_file in detail_docs:
+            content = doc_file.read().decode('utf-8')
+            detail_docs_md += f"## {doc_file.filename}\n\n{content}\n\n"
+        
+        # ステップ1: シナリオ抽出
+        logging.info("ステップ1: 業務シナリオを抽出します。")
+        scenario_prompt = f'''
+            --- 画面一覧 ---
+            {screen_list_md}
+            
+            --- 画面遷移定義 ---
+            {transition_md}
+            
+            --- 詳細設計書 ---
+            {detail_docs_md}
+        '''
+        scenarios_md = extract_integration_scenarios(scenario_prompt)
+        logging.info("シナリオ抽出が完了しました。")
+        
+        # ステップ2: シナリオ詳細化
+        logging.info("ステップ2: シナリオを詳細なテストケースに展開します。")
+        test_spec_prompt = f'''
+            --- 抽出されたシナリオ ---
+            {scenarios_md}
+            
+            --- 画面一覧 ---
+            {screen_list_md}
+            
+            --- 画面遷移定義 ---
+            {transition_md}
+            
+            --- 詳細設計書 ---
+            {detail_docs_md}
+        '''
+        test_spec_md = create_integration_test_spec(test_spec_prompt)
+        logging.info("結合テスト仕様書の生成が完了しました。")
+        
+        # ZIPファイルにまとめる
+        logging.info("全成果物をZIPファイルにまとめています。")
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            zip_file.writestr("1_画面一覧.md", screen_list_md.encode('utf-8'))
+            zip_file.writestr("2_画面遷移定義.md", transition_md.encode('utf-8'))
+            zip_file.writestr("3_業務シナリオ.md", scenarios_md.encode('utf-8'))
+            zip_file.writestr("4_結合テスト仕様書.md", test_spec_md.encode('utf-8'))
+        
+        zip_buffer.seek(0)
+        zip_bytes = zip_buffer.read()
+        logging.info("ZIPファイルの作成が完了しました。")
+        
+        output_filename = "結合テスト仕様書.zip"
+        encoded_filename = quote(output_filename)
+        headers = {
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+            "Content-Type": "application/zip",
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+        return func.HttpResponse(zip_bytes, status_code=200, headers=headers)
+
+    except ValueError as ve:
         logging.error(f"設定エラー: {ve}")
         return func.HttpResponse(str(ve), status_code=500)
     except Exception as e:

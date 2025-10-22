@@ -9,13 +9,36 @@
         <div class="container">
             <h1>使用モデル</br>（Claude Sonnet 4.5）</h1>
 
-            <input type="file" id="fileInput" /><br /><br />
+            <div class="test-type-selector">
+                <label>
+                    <input type="radio" name="testType" value="unit" checked />
+                    単体テスト仕様書生成
+                </label>
+                <label>
+                    <input type="radio" name="testType" value="integration" />
+                    結合テスト仕様書生成
+                </label>
+            </div>
+
+            <div id="unitTestInputs" class="file-inputs">
+                <label>詳細設計書（Excel）:</label>
+                <input type="file" id="unitFileInput" accept=".xlsx" />
+            </div>
+
+            <div id="integrationTestInputs" class="file-inputs" style="display: none;">
+                <label>画面一覧（Excel）:</label>
+                <input type="file" id="screenListInput" accept=".xlsx" /><br />
+                <label>画面遷移定義（Excel）:</label>
+                <input type="file" id="transitionInput" accept=".xlsx" /><br />
+                <label>詳細設計書（Markdown、複数可）:</label>
+                <input type="file" id="detailDocsInput" accept=".md" multiple />
+            </div>
+
+            <br />
             <button id="uploadBtn">アップロードして生成</button>
 
             <p id="status"></p>
         </div>
         <script src="script.js"></script>
-    </body>
-</html>
     </body>
 </html>

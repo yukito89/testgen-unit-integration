@@ -15,12 +15,52 @@ body {
     border-radius: 10px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     text-align: center;
-    width: 400px;
+    width: 500px;
+    max-width: 90%;
 }
 
 h1 {
     color: #1c1e21;
     margin-bottom: 1.5rem;
+}
+
+.test-type-selector {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background-color: #f7f8fa;
+    border-radius: 8px;
+}
+
+.test-type-selector label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-weight: 500;
+    color: #1c1e21;
+}
+
+.test-type-selector input[type="radio"] {
+    width: auto;
+    margin: 0;
+    cursor: pointer;
+}
+
+.file-inputs {
+    text-align: left;
+    margin-bottom: 1rem;
+}
+
+.file-inputs label {
+    display: block;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: #1c1e21;
+    font-size: 0.9rem;
 }
 
 input[type="file"] {
@@ -29,7 +69,8 @@ input[type="file"] {
     border-radius: 5px;
     width: 100%;
     box-sizing: border-box;
-    margin-bottom: 1rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
 }
 
 button {
