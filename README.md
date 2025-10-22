@@ -247,20 +247,22 @@ Bedrockのモデルを呼び出すための権限をまとめたIAMポリシー�
 日本リージョン用の共有推論プロファイルが用意されているため、それを利用します。
 
 ```.env
-# --- AWS Bedrock Connection Information ---
-# LLMサービスの選択 (AWSまたはAZURE)
+# -------------------- LLMサービスの選択 --------------------
+# 使用するLLMサービスを選択します ("AZURE" or "AWS")
 LLM_SERVICE=AWS
 
-# AWSリージョン (ap-northeast-1 を指定)
+
+# -------------------- AWS Bedrock 接続情報 --------------------
+# AWSリージョン (例: "ap-northeast-1")
 AWS_REGION=ap-northeast-1
 
 # AWSアクセスキーID
-AWS_ACCESS_KEY_ID=...
+AWS_ACCESS_KEY_ID=<ここにアクセスキーIDを記述>
 
 # AWSシークレットアクセスキー
-AWS_SECRET_ACCESS_KEY=...
+AWS_SECRET_ACCESS_KEY=<ここにシークレットアクセスキーを記述>
 
-# AWS Bedrock 推論プロファイルID
+# AWS BedrockモデルID (例: "jp.anthropic.claude-sonnet-4-5-20250929-v1:0")
 AWS_BEDROCK_MODEL_ID=jp.anthropic.claude-sonnet-4-5-20250929-v1:0
 ```
 **注意:** 上記の推論プロファイルは `ap-northeast-1` (東京リージョン) 専用です。他のリージョンで実行する場合は、別途推論プロファイルを作成し、そのARNを指定する必要があります。
@@ -272,11 +274,21 @@ AWS_BEDROCK_MODEL_ID=jp.anthropic.claude-sonnet-4-5-20250929-v1:0
 `LLM_SERVICE="AZURE"`を選択した場合、以下の環境変数を設定します。
 
 ```.env
-# --- Azure OpenAI Service Connection Information ---
-AZURE_OPENAI_API_KEY=...
-AZURE_OPENAI_ENDPOINT=...
-AZURE_OPENAI_API_VERSION=...
-AZURE_OPENAI_DEPLOYMENT=...
+# -------------------- Azure OpenAI Service 接続情報 --------------------
+# APIキー (必須)
+AZURE_OPENAI_API_KEY=<ここにAPIキーを記述>
+
+# エンドポイント (必須)
+# 例: https://your-service-name.openai.azure.com
+AZURE_OPENAI_ENDPOINT=<ここにエンドポイントを記述>
+
+# APIバージョン (必須)
+# 例: 2024-02-01
+AZURE_OPENAI_API_VERSION=<ここにAPIバージョンを記述>
+
+# デプロイ名 (必須)
+# 例: gpt-4o
+AZURE_OPENAI_DEPLOYMENT=<ここにデプロイ名を記述>
 ```
 
 これらの値は、AzureポータルでAzure OpenAI Serviceのリソースを作成し、「キーとエンドポイント」から取得できます。`AZURE_OPENAI_DEPLOYMENT`には、作成したモデルのデプロイ名を指定します。
