@@ -49,7 +49,11 @@ uploadBtn.addEventListener("click", async () => {
     uploadBtn.disabled = true;
     status.textContent = "生成中...";
 
-    const endpoint = "http://localhost:7071/api/upload";
+    // ==== ローカル開発用 ====
+    // const endpoint = "http://localhost:7071/api/upload";
+
+    // ==== 本番環境用 ====
+    const endpoint = "https://poc-function-20251023.azurewebsites.net/api/upload";
 
     try {
         const res = await fetch(endpoint, {
