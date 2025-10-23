@@ -33,7 +33,7 @@
 
 ## 前提条件
 
-- [Python 3.9 以降](https://www.python.org/)
+- [Python 3.11](https://www.python.org/)
 - [Visual Studio Code](https://code.visualstudio.com/)
 - [Node.js 18.x 以降](https://nodejs.org/) （Azure Functions Core Toolsのインストールに必要）
 - [AWS アカウント](https://aws.amazon.com/jp/) （Bedrock利用時）
@@ -132,9 +132,11 @@ Azure Functions Core Toolsは、ローカル環境でAzure Functionsを開発・
     
     VS Codeのターミナル（`Ctrl+@`で開く）で以下を実行します。
     ```
-    python -m venv .venv
+    py -3.11 -m venv .venv
     .venv\Scripts\activate
     ```
+    
+    **注意:** Python 3.11がインストールされていない場合は、[Python公式サイト](https://www.python.org/downloads/)からダウンロードしてインストールしてください。
 
 4.  **必要なライブラリのインストール**
     ```
@@ -326,7 +328,7 @@ AZURE_OPENAI_DEPLOYMENT=<ここにデプロイ名を記述>
 3.  **Function Appの作成とデプロイ**
     - サイドバーの「Azure」→「Functions」を右クリック
     - 「Create Function App in Azure...」を選択
-    - アプリ名、Pythonバージョン（3.9以降）、リージョンを指定
+    - アプリ名、Pythonバージョン（**3.11を推奨**）、リージョンを指定
     - 作成完了後、作成したFunction Appを右クリック→「Deploy to Function App...」を選択
     - **注意:** `単体テスト仕様書.xlsx`がプロジェクトルートに配置されていることを確認してください。デプロイ時に自動的に含まれます。`.funcignore`に`*.xlsx`が記載されている場合は削除してください。
 
