@@ -308,7 +308,7 @@ AZURE_OPENAI_DEPLOYMENT=<ここにデプロイ名を記述>
 
 3.  フロントエンドからの動作確認
     - VS Codeで「Live Server」拡張機能をインストール
-    - `index.html`を右クリック→「Open with Live Server」で起動
+    - `frontend/index.html`を右クリック→「Open with Live Server」で起動
     - ブラウザでExcelファイルをアップロードして動作確認
 
 ---
@@ -339,7 +339,7 @@ AZURE_OPENAI_DEPLOYMENT=<ここにデプロイ名を記述>
 
 1.  **script.jsのAPIエンドポイント変更**
     
-    `script.js`を編集し、Function AppのURLを設定します。
+    `frontend/script.js`を編集し、Function AppのURLを設定します。
     ```javascript
     const endpoint = 'https://<your-function-app>.azurewebsites.net/api/upload';
     ```
@@ -356,16 +356,23 @@ AZURE_OPENAI_DEPLOYMENT=<ここにデプロイ名を記述>
     **注意:** GitHubリポジトリがまだない場合は、事前にGitHub上でリポジトリを作成し、ローカルリポジトリと連携してください。
 
 3.  **Azure Static Web Appsの作成とデプロイ**
-    - VS Codeのサイドバーから「Azure」アイコンをクリック
-    - 「Static Web Apps」セクションを右クリック
-    - 「Create Static Web App...」を選択
-    - アプリ名を入力
-    - リージョンを選択（例: East Asia）
-    - ビルドプリセットで「Custom」を選択
-    - アプリコードの場所: `/`（プロジェクトルート）
-    - APIの場所: 空欄（APIはFunction Appで別途デプロイ済み）
-    - 出力場所: `/`（ビルド不要のため）
-    - GitHubリポジトリとブランチを選択
+    - Azureポータル (https://portal.azure.com) にアクセス
+    - 「リソースの作成」→「Static Web App」を検索して選択
+    - 「作成」をクリック
+    - 基本設定:
+      - サブスクリプション、リソースグループを選択
+      - 名前を入力
+      - リージョンを選択（例: East Asia）
+    - デプロイの詳細:
+      - ソース: 「GitHub」を選択
+      - GitHubアカウントでサインイン
+      - 組織、リポジトリ、ブランチを選択
+    - ビルドの詳細:
+      - ビルドプリセット: 「Custom」を選択
+      - アプリの場所: `/frontend`
+      - APIの場所: 空欄（APIはFunction Appで別途デプロイ済み）
+      - 出力場所: 空欄
+    - 「確認および作成」→「作成」をクリック
     - 作成完了後、GitHub Actionsが自動でデプロイを実行します
 
 4.  **CORS設定（Function App側）**
@@ -387,7 +394,7 @@ AZURE_OPENAI_DEPLOYMENT=<ここにデプロイ名を記述>
 - **`host.json`**: Azure Functionsホストのグローバル設定ファイル。ログ設定、拡張機能バンドルのバージョンなど、アプリケーション全体の動作を制御します。
 - **`local.settings.json`**: ローカル開発環境専用の設定ファイル。ランタイム設定、CORS設定、ローカル環境変数などを管理します（`.gitignore`で除外済み）。
 - **`単体テスト仕様書.xlsx`**: テスト仕様書を生成する際の書き込み先テンプレートExcelファイル。プロジェクトルートに配置し、Azure Functionsと一緒にデプロイされます。
-- **`index.html`, `script.js`, `style.css`**: 簡単な動作確認用のフロントエンドファイル。
+- **`frontend/index.html`, `frontend/script.js`, `frontend/style.css`**: 簡単な動作確認用のフロントエンドファイル。
 
 ---
 
