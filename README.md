@@ -33,7 +33,7 @@
 
 ## 前提条件
 
-- [Python 3.11](https://www.python.org/)
+- [Python 3.11](https://www.python.org/downloads/release/python-3110/)
 - [Visual Studio Code](https://code.visualstudio.com/)
 - [Node.js 18.x 以降](https://nodejs.org/) （Azure Functions Core Toolsのインストールに必要）
 - [AWS アカウント](https://aws.amazon.com/jp/) （Bedrock利用時）
@@ -136,7 +136,7 @@ Azure Functions Core Toolsは、ローカル環境でAzure Functionsを開発・
     .venv\Scripts\activate
     ```
     
-    **注意:** Python 3.11がインストールされていない場合は、[Python公式サイト](https://www.python.org/downloads/)からダウンロードしてインストールしてください。
+    **注意:** Python 3.11がインストールされていない場合は、[Python公式サイト](https://www.python.org/downloads/release/python-3110/)からダウンロードしてインストールしてください。
 
 4.  **必要なライブラリのインストール**
     ```
