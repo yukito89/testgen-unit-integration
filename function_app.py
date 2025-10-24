@@ -287,68 +287,61 @@ def structuring_transition(prompt: str) -> str:
     '''
     return call_llm(system_prompt, prompt)
 
-def extract_integration_scenarios(prompt: str) -> str:
-    system_prompt = '''
-        あなたは結合テストの専門家です。画面一覧、画面遷移定義、詳細設計書から業務シナリオを抽出してください。
-
-        【タスク】
-        提供された情報から、エンドツーエンドの業務シナリオを抽出し、Markdown表形式で出力してください。
-
-        【出力形式】
-        以下の10列構成のMarkdown表で出力：
-        - テストNo: シナリオID（A-01, B-01など）
-        - 画面1: 開始画面名
-        - 機能/操作/状況1: 画面1での操作内容
-        - 画面2: 遷移先画面名（なければ空欄）
-        - 機能/操作/状況2: 画面2での操作内容（なければ空欄）
-        - 画面3: 遷移先画面名（なければ空欄）
-        - 機能/操作/状況3: 画面3での操作内容（なければ空欄）
-        - 画面4: 遷移先画面名（なければ空欄）
-        - 機能/操作/状況4: 画面4での操作内容（なければ空欄）
-        - 確認内容: シナリオ全体で確認すべき内容
-
-        【記述ルール】
-        - 業務フロー単位でシナリオをグループ化（A群、B群など）
-        - 各シナリオは主要な業務パスを表現
-        - 正常系、異常系、代替パスを含める
-        - 画面遷移は最大4画面まで（それ以上は別シナリオに分割）
-        - 確認内容は「～であること」「～されること」で統一
-        - 表形式のみ出力（説明文は不要）
-    '''
-    return call_llm(system_prompt, prompt)
-
 def create_integration_test_spec(prompt: str) -> str:
     system_prompt = '''
-        あなたは結合テストの専門家です。抽出されたシナリオを詳細なテストケースに展開してください。
+        あなたは結合テストの専門家です。構造化詳細設計書と画面関連情報から、実行可能な結合テスト仕様書を作成してください。
+
+        【重要】スコープの理解
+        - 構造化詳細設計書に記載されている画面のみを対象とする
+        - 画面一覧・画面遷移図には全システムの情報が含まれているが、詳細設計書に記載がある画面のみを使用
+        - 手順：
+          1. まず構造化詳細設計書から対象画面を特定する
+          2. 画面遷移図から、特定した画面間の遷移のみを抽出する
+          3. 設計書に記載のない画面は、遷移図にあってもテストシナリオに含めない
+        - 例：設計書に「ログイン画面」「商品検索画面」のみある場合、遷移図に「管理画面」があってもそれは使用しない
 
         【タスク】
-        各シナリオを細かいテストケースに分解し、実行可能なレベルまで詳細化してください。
+        設計書の処理フローと画面遷移情報から、画面間をまたぐ業務シナリオを抽出し、具体的なテストデータを含むテストケースに展開してください。
+        
+        【テストデータの生成】
+        - 入力項目には具体的な値を記述（例：ユーザーID="admin"、パスワード="Pass123"）
+        - 正常値、境界値、異常値のパターンを具体例で示す
+        - 設計書に制約があればそれに合わせた値を生成（例：桁数が10桁なら"1234567890"）
+        - 日付は"2024-01-15"形式、金額は"10000"など具体的に
 
         【出力形式】
-        以下の10列構成のMarkdown表で出力：
-        - テストNo: テストケースID（A-01-1, A-01-2など、シナリオIDに枝番を付与）
+        以下の列構成のMarkdown表で出力：
+        - テストNo: テストケースID（A-01, A-02など）
         - 画面1: 開始画面名
-        - 機能/操作/状況1: 画面1での具体的操作
+        - 機能/操作/状況1: 画面1での具体的操作（テストデータ含む）
         - 画面2: 遷移先画面名
-        - 機能/操作/状況2: 画面2での具体的操作
+        - 機能/操作/状況2: 画面2での具体的操作（テストデータ含む）
         - 画面3: 遷移先画面名
-        - 機能/操作/状況3: 画面3での具体的操作
+        - 機能/操作/状況3: 画面3での具体的操作（テストデータ含む）
         - 画面4: 遷移先画面名
-        - 機能/操作/状況4: 画面4での具体的操作
+        - 機能/操作/状況4: 画面4での具体的操作（テストデータ含む）
         - 確認内容: 具体的な確認事項
 
-        【詳細化の観点】
-        - 入力値のバリエーション（正常値、境界値、異常値）
-        - 権限による動作の違い
-        - データ状態による分岐
-        - エラーハンドリング
-        - 画面項目の初期値、表示制御
+        【列数の統一】
+        - 全てのテストケースで上記の列構成を統一すること
+        - 画面遷移が少ない場合は該当列を空欄にする
+        - 例：2画面のみの場合、画面3～4と機能/操作/状況3～4は空欄
+        - 4画面を超える場合は複数のテストケースに分割する
+
+        【テストケース生成の観点】
+        - 正常系：代表的な業務フローを具体的なデータでテスト
+        - 境界値：桁数上限、下限、最大値、最小値など
+        - 異常系：入力エラー、権限エラー、データ不存在など
 
         【記述ルール】
-        - 1シナリオから複数のテストケースを生成
-        - 操作内容は具体的に記述（ボタン名、入力値など）
+        - 操作内容は「ボタン名 + 具体的な入力値」を明記
+        - 例：「ユーザーID欄に"admin"、パスワード欄に"Pass123!"を入力し、「ログイン」ボタンをクリック」
         - 確認内容は「～であること」「～されること」で統一
         - 表形式のみ出力（説明文は不要）
+        
+        【禁止事項】
+        - 構造化詳細設計書に記載のない画面をテストシナリオに含めること
+        - 画面遷移図のみに存在する画面を使用すること
     '''
     return call_llm(system_prompt, prompt)
 
@@ -535,11 +528,10 @@ def generate_unit_test(req: func.HttpRequest) -> func.HttpResponse:
 
 def generate_integration_test(req: func.HttpRequest) -> func.HttpResponse:
     try:
-        screen_list_file = req.files.get("screenListFile")
-        transition_file = req.files.get("transitionFile")
-        detail_docs = req.files.getlist("detailDocs")
+        structured_design_files = req.files.getlist("structuredDesignFiles")
+        transition_diagram_file = req.files.get("transitionDiagramFile")
         
-        if not screen_list_file or not transition_file or not detail_docs:
+        if not structured_design_files or not transition_diagram_file:
             return func.HttpResponse("必須ファイルが不足しています", status_code=400)
             
     except Exception as e:
@@ -549,61 +541,31 @@ def generate_integration_test(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("結合テスト生成を開始します。")
 
     try:
-        # 画面一覧を読み込み、AIで構造化
-        logging.info("画面一覧をAIで構造化します。")
-        screen_list_data = pd.read_excel(io.BytesIO(screen_list_file.read()), sheet_name=None, header=None)
-        screen_list_md = ""
-        for sheet_name, df in screen_list_data.items():
-            raw_text = '\n'.join(df.apply(lambda row: ' | '.join(row.astype(str).fillna('')), axis=1))
-            prompt = f'--- 画面一覧「{sheet_name}」 ---\n{raw_text}'
-            screen_list_md += f"## {sheet_name}\n\n{structuring_screen_list(prompt)}\n\n"
-        logging.info("画面一覧の構造化が完了しました。")
+        # 複数の構造化詳細設計書を読み込み、結合
+        structured_design_md = ""
+        for design_file in structured_design_files:
+            content = design_file.read().decode('utf-8')
+            structured_design_md += f"\n\n# {design_file.filename}\n\n{content}\n\n---\n\n"
+        logging.info(f"{len(structured_design_files)}件の構造化詳細設計書を読み込みました。")
         
-        # 画面遷移定義を読み込み、AIで構造化
-        logging.info("画面遷移定義をAIで構造化します。")
-        transition_data = pd.read_excel(io.BytesIO(transition_file.read()), sheet_name=None, header=None)
+        # 画面一覧/画面遷移図を読み込み、AIで構造化
+        logging.info("画面一覧/画面遷移図（Excel）をAIで構造化します。")
+        transition_data = pd.read_excel(io.BytesIO(transition_diagram_file.read()), sheet_name=None, header=None)
         transition_md = ""
         for sheet_name, df in transition_data.items():
             raw_text = '\n'.join(df.apply(lambda row: ' | '.join(row.astype(str).fillna('')), axis=1))
-            prompt = f'--- 画面遷移定義「{sheet_name}」 ---\n{raw_text}'
+            prompt = f'--- 画面一覧/画面遷移図「{sheet_name}」 ---\n{raw_text}'
             transition_md += f"## {sheet_name}\n\n{structuring_transition(prompt)}\n\n"
-        logging.info("画面遷移定義の構造化が完了しました。")
+        logging.info("画面一覧/画面遷移図の構造化が完了しました。")
         
-        # 詳細設計書.mdを読み込み
-        detail_docs_md = ""
-        for doc_file in detail_docs:
-            content = doc_file.read().decode('utf-8')
-            detail_docs_md += f"## {doc_file.filename}\n\n{content}\n\n"
-        
-        # ステップ1: シナリオ抽出
-        logging.info("ステップ1: 業務シナリオを抽出します。")
-        scenario_prompt = f'''
-            --- 画面一覧 ---
-            {screen_list_md}
-            
-            --- 画面遷移定義 ---
-            {transition_md}
-            
-            --- 詳細設計書 ---
-            {detail_docs_md}
-        '''
-        scenarios_md = extract_integration_scenarios(scenario_prompt)
-        logging.info("シナリオ抽出が完了しました。")
-        
-        # ステップ2: シナリオ詳細化
-        logging.info("ステップ2: シナリオを詳細なテストケースに展開します。")
+        # 結合テスト仕様書を直接生成
+        logging.info("結合テスト仕様書を生成します。")
         test_spec_prompt = f'''
-            --- 抽出されたシナリオ ---
-            {scenarios_md}
+            --- 構造化詳細設計書 ---
+            {structured_design_md}
             
-            --- 画面一覧 ---
-            {screen_list_md}
-            
-            --- 画面遷移定義 ---
+            --- 画面一覧/画面遷移図 ---
             {transition_md}
-            
-            --- 詳細設計書 ---
-            {detail_docs_md}
         '''
         test_spec_md = create_integration_test_spec(test_spec_prompt)
         logging.info("結合テスト仕様書の生成が完了しました。")
@@ -612,10 +574,8 @@ def generate_integration_test(req: func.HttpRequest) -> func.HttpResponse:
         logging.info("全成果物をZIPファイルにまとめています。")
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            zip_file.writestr("1_画面一覧.md", screen_list_md.encode('utf-8'))
-            zip_file.writestr("2_画面遷移定義.md", transition_md.encode('utf-8'))
-            zip_file.writestr("3_業務シナリオ.md", scenarios_md.encode('utf-8'))
-            zip_file.writestr("4_結合テスト仕様書.md", test_spec_md.encode('utf-8'))
+            zip_file.writestr("1_画面関連情報.md", transition_md.encode('utf-8'))
+            zip_file.writestr("2_結合テスト仕様書.md", test_spec_md.encode('utf-8'))
         
         zip_buffer.seek(0)
         zip_bytes = zip_buffer.read()

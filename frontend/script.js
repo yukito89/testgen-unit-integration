@@ -30,20 +30,18 @@ uploadBtn.addEventListener("click", async () => {
         }
         formData.append("documentFile", file);
     } else {
-        const screenList = document.querySelector("#screenListInput").files[0];
-        const transition = document.querySelector("#transitionInput").files[0];
-        const detailDocs = document.querySelector("#detailDocsInput").files;
+        const structuredDesigns = document.querySelector("#structuredDesignInput").files;
+        const transitionDiagram = document.querySelector("#transitionDiagramInput").files[0];
 
-        if (!screenList || !transition || detailDocs.length === 0) {
+        if (structuredDesigns.length === 0 || !transitionDiagram) {
             status.textContent = "必須ファイルをすべて選択してください";
             return;
         }
 
-        formData.append("screenListFile", screenList);
-        formData.append("transitionFile", transition);
-        for (let i = 0; i < detailDocs.length; i++) {
-            formData.append("detailDocs", detailDocs[i]);
+        for (let i = 0; i < structuredDesigns.length; i++) {
+            formData.append("structuredDesignFiles", structuredDesigns[i]);
         }
+        formData.append("transitionDiagramFile", transitionDiagram);
     }
 
     uploadBtn.disabled = true;
